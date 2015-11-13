@@ -15,6 +15,15 @@ type Redis struct {
 	client *redis.Client
 }
 
+// Write implements io.Writer interface
+func (r *Redis) Write(p []byte) (int, error) {
+	err := r.Publish("build_queue_update", string(p))
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
 // Init initializes redis connection
 func (r *Redis) Init(connString string) error {
 	r.client = redis.NewClient(&redis.Options{
@@ -61,9 +70,13 @@ func (r *Redis) Subscribe(
 		for {
 			select {
 			case <-t.C:
-				msg, err := pubSub.Receive()
+				msg, err := pubSub.ReceiveTimeout(time.Second * 1)
+
 				if err == nil {
-					c <- msg
+					switch msg.(type) {
+					case *redis.Message:
+						c <- msg
+					}
 				}
 
 			case <-stop:
